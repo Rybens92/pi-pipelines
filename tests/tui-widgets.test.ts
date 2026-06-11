@@ -14,11 +14,15 @@ import { describe, it, expect, vi } from "vitest";
 vi.mock("@earendil-works/pi-tui", () => {
   class MockContainer {
     children: unknown[] = [];
-    addChild(child: unknown) { this.children.push(child); }
+    addChild(child: unknown) {
+      this.children.push(child);
+    }
   }
   class MockText {
     text: string;
-    constructor(text: string, ..._args: unknown[]) { this.text = text; }
+    constructor(text: string, ..._args: unknown[]) {
+      this.text = text;
+    }
   }
   class MockSpacer {}
   return { Container: MockContainer, Text: MockText, Spacer: MockSpacer };
@@ -39,7 +43,12 @@ const mockTheme = {
 
 /** Check if a component has the addChild method — duck-type for Container */
 function isContainer(c: unknown): boolean {
-  return typeof c === "object" && c !== null && "addChild" in c && typeof (c as Record<string, unknown>).addChild === "function";
+  return (
+    typeof c === "object" &&
+    c !== null &&
+    "addChild" in c &&
+    typeof (c as Record<string, unknown>).addChild === "function"
+  );
 }
 
 /** Check if a component has a text property — duck-type for Text */

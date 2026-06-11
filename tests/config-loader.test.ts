@@ -107,11 +107,7 @@ describe("discoverPipelineFiles", () => {
     writePipeline("m.pipeline.yaml", minimalPipelineYaml("m"));
     const result = discoverPipelineFiles(tmpDir);
     const basenames = result.map((f) => path.basename(f));
-    expect(basenames).toEqual([
-      "a.pipeline.yaml",
-      "m.pipeline.yaml",
-      "z.pipeline.yaml",
-    ]);
+    expect(basenames).toEqual(["a.pipeline.yaml", "m.pipeline.yaml", "z.pipeline.yaml"]);
   });
 
   it("does NOT match files without the .pipeline. prefix", () => {
@@ -256,8 +252,14 @@ describe("listPipelinesFromDirs", () => {
     const dir2 = path.join(tmpDir, "ext");
     fs.mkdirSync(dir1, { recursive: true });
     fs.mkdirSync(dir2, { recursive: true });
-    writePipeline(path.join("user", "release-check.pipeline.yaml"), minimalPipelineYaml("release-check"));
-    writePipeline(path.join("ext", "release-check.pipeline.yaml"), minimalPipelineYaml("release-check-ext"));
+    writePipeline(
+      path.join("user", "release-check.pipeline.yaml"),
+      minimalPipelineYaml("release-check"),
+    );
+    writePipeline(
+      path.join("ext", "release-check.pipeline.yaml"),
+      minimalPipelineYaml("release-check-ext"),
+    );
 
     const result = listPipelinesFromDirs([dir1, dir2]);
     expect(result).toHaveLength(1);
@@ -286,9 +288,7 @@ describe("listPipelinesFromDirs", () => {
 
 describe("loadPipeline — file I/O errors", () => {
   it("throws PipelineValidationError when file does not exist", () => {
-    expect(() => loadPipeline("/nonexistent/file.yaml")).toThrow(
-      /Cannot read pipeline file/,
-    );
+    expect(() => loadPipeline("/nonexistent/file.yaml")).toThrow(/Cannot read pipeline file/);
   });
 
   it("throws PipelineValidationError on invalid YAML", () => {
@@ -324,17 +324,26 @@ describe("loadPipeline — top-level structure validation", () => {
   });
 
   it("throws when name is empty string", () => {
-    const f = writePipeline("empty-name.yaml", `name: ""\ndescription: "x"\nstages:\n  - id: s1\n    agent: w`);
+    const f = writePipeline(
+      "empty-name.yaml",
+      `name: ""\ndescription: "x"\nstages:\n  - id: s1\n    agent: w`,
+    );
     expect(() => loadPipeline(f)).toThrow(/must have a 'name' field/);
   });
 
   it("throws when name is whitespace-only", () => {
-    const f = writePipeline("ws-name.yaml", `name: "   "\ndescription: "x"\nstages:\n  - id: s1\n    agent: w`);
+    const f = writePipeline(
+      "ws-name.yaml",
+      `name: "   "\ndescription: "x"\nstages:\n  - id: s1\n    agent: w`,
+    );
     expect(() => loadPipeline(f)).toThrow(/must have a 'name' field/);
   });
 
   it("throws when name is not a string (number)", () => {
-    const f = writePipeline("num-name.yaml", `name: 42\ndescription: "x"\nstages:\n  - id: s1\n    agent: w`);
+    const f = writePipeline(
+      "num-name.yaml",
+      `name: 42\ndescription: "x"\nstages:\n  - id: s1\n    agent: w`,
+    );
     expect(() => loadPipeline(f)).toThrow(/must have a 'name' field/);
   });
 
@@ -344,7 +353,10 @@ describe("loadPipeline — top-level structure validation", () => {
   });
 
   it("throws when description is not a string", () => {
-    const f = writePipeline("bad-desc.yaml", `name: "test"\ndescription: 42\nstages:\n  - id: s1\n    agent: w`);
+    const f = writePipeline(
+      "bad-desc.yaml",
+      `name: "test"\ndescription: 42\nstages:\n  - id: s1\n    agent: w`,
+    );
     expect(() => loadPipeline(f)).toThrow(/must have a 'description' field/);
   });
 
@@ -371,7 +383,10 @@ describe("loadPipeline — stage validation", () => {
   });
 
   it("throws when a stage is a string", () => {
-    const f = writePipeline("stage-str.yaml", `name: "test"\ndescription: "x"\nstages:\n  - "hello"`);
+    const f = writePipeline(
+      "stage-str.yaml",
+      `name: "test"\ndescription: "x"\nstages:\n  - "hello"`,
+    );
     expect(() => loadPipeline(f)).toThrow(/Stage #1 must be an object/);
   });
 
@@ -381,7 +396,10 @@ describe("loadPipeline — stage validation", () => {
   });
 
   it("throws when stage id is empty", () => {
-    const f = writePipeline("empty-id.yaml", `name: "test"\ndescription: "x"\nstages:\n  - id: ""\n    agent: w`);
+    const f = writePipeline(
+      "empty-id.yaml",
+      `name: "test"\ndescription: "x"\nstages:\n  - id: ""\n    agent: w`,
+    );
     expect(() => loadPipeline(f)).toThrow(/must have an 'id' field/);
   });
 
@@ -391,22 +409,34 @@ describe("loadPipeline — stage validation", () => {
   });
 
   it("throws when stage has both agent and parallel", () => {
-    const f = writePipeline("agent-and-parallel.yaml", `name: "test"\ndescription: "x"\nstages:\n  - id: s1\n    agent: worker\n    parallel:\n      - id: child\n        agent: scout`);
+    const f = writePipeline(
+      "agent-and-parallel.yaml",
+      `name: "test"\ndescription: "x"\nstages:\n  - id: s1\n    agent: worker\n    parallel:\n      - id: child\n        agent: scout`,
+    );
     expect(() => loadPipeline(f)).toThrow(/cannot have both 'agent' and 'parallel'/);
   });
 
   it("throws when a parallel child is nested parallel", () => {
-    const f = writePipeline("nested-parallel.yaml", `name: "test"\ndescription: "x"\nstages:\n  - id: s1\n    parallel:\n      - id: child\n        parallel:\n          - id: nested\n            agent: scout`);
+    const f = writePipeline(
+      "nested-parallel.yaml",
+      `name: "test"\ndescription: "x"\nstages:\n  - id: s1\n    parallel:\n      - id: child\n        parallel:\n          - id: nested\n            agent: scout`,
+    );
     expect(() => loadPipeline(f)).toThrow(/cannot use nested 'parallel' stages/);
   });
 
   it("throws when stage agent is empty string", () => {
-    const f = writePipeline("empty-agent.yaml", `name: "test"\ndescription: "x"\nstages:\n  - id: s1\n    agent: ""`);
+    const f = writePipeline(
+      "empty-agent.yaml",
+      `name: "test"\ndescription: "x"\nstages:\n  - id: s1\n    agent: ""`,
+    );
     expect(() => loadPipeline(f)).toThrow(/must have an 'agent' field/);
   });
 
   it("throws when stage agent is not a string", () => {
-    const f = writePipeline("num-agent.yaml", `name: "test"\ndescription: "x"\nstages:\n  - id: s1\n    agent: 42`);
+    const f = writePipeline(
+      "num-agent.yaml",
+      `name: "test"\ndescription: "x"\nstages:\n  - id: s1\n    agent: 42`,
+    );
     expect(() => loadPipeline(f)).toThrow(/must have an 'agent' field/);
   });
 

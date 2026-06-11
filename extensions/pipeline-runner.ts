@@ -16,9 +16,24 @@
 import * as path from "node:path";
 import yaml from "js-yaml";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import type { PipelineDef, Stage, StageResult, PipelineResult, StageReportConfig } from "./types.ts";
+import type { PipelineDef, Stage, StageResult, PipelineResult } from "./types.ts";
 import { findPipelineFile, listPipelines, loadPipeline } from "./config-loader.ts";
 import { executeSubagent, extractResponseText } from "./subagent-bridge.ts";
+import { formatDuration } from "./utils.ts";
+
+/**
+ * Per-round timeout for the worker agent inside a review gate.
+ * Prevents a stuck worker from blocking the entire pipeline.
+ * @internal Exported for testing.
+ */
+export const GATE_WORKER_TIMEOUT_MS = 600_000; // 10 min
+
+/**
+ * Per-round timeout for the reviewer agents inside a review gate.
+ * Prevents stuck reviewers from blocking the entire pipeline.
+ * @internal Exported for testing.
+ */
+export const GATE_REVIEWER_TIMEOUT_MS = 300_000; // 5 min
 
 /** Default pipelines directory relative to cwd */
 const PIPELINES_DIR = ".pi/pipelines";
@@ -60,7 +75,9 @@ export function buildReportContext(
   const passed = stages.filter((s) => s.success).length;
   const total = stages.length;
   const totalMs = stages.reduce((sum, s) => sum + s.durationMs, 0);
-  lines.push(`Status: ${passed === total ? "PASSED" : "FAILED"} (${passed}/${total} stages passed, ${formatDuration(totalMs)})`);
+  lines.push(
+    `Status: ${passed === total ? "PASSED" : "FAILED"} (${passed}/${total} stages passed, ${formatDuration(totalMs)})`,
+  );
   lines.push("");
   lines.push("## Stage Results");
   lines.push("");
@@ -126,11 +143,15 @@ Produce a concise summary of the stage output, maximum ${maxLen} characters.
 Focus on key facts, decisions, and results relevant to downstream stages.
 Ignore verbose reasoning, iterative exploration, and internal commentary.`;
 
-  const response = await executeSubagent(pi, {
-    agent: "worker",
-    task: prompt,
-    context: "fresh",
-  }, signal);
+  const response = await executeSubagent(
+    pi,
+    {
+      agent: "worker",
+      task: prompt,
+      context: "fresh",
+    },
+    signal,
+  );
 
   const summary = extractResponseText(response) || "(summary unavailable)";
   return summary.length > maxLen ? summary.slice(0, maxLen) + "..." : summary;
@@ -151,13 +172,7 @@ export async function runReportSynthesis(
   focus?: string,
   signal?: AbortSignal,
 ): Promise<string> {
-  const context = buildReportContext(
-    pipeline.name,
-    pipeline.description,
-    task,
-    stages,
-    focus,
-  );
+  const context = buildReportContext(pipeline.name, pipeline.description, task, stages, focus);
 
   const synthesisAgent = agentName || "planner";
 
@@ -176,11 +191,15 @@ ${context}
 ---
 Generate the pipeline report now.`;
 
-  const response = await executeSubagent(pi, {
-    agent: synthesisAgent,
-    task: prompt,
-    context: "fresh",
-  }, signal);
+  const response = await executeSubagent(
+    pi,
+    {
+      agent: synthesisAgent,
+      task: prompt,
+      context: "fresh",
+    },
+    signal,
+  );
 
   return extractResponseText(response) || "(report synthesis produced no output)";
 }
@@ -240,7 +259,12 @@ export async function runPipeline(
 
   // Check for pre-existing cancellation
   if (parentSignal?.aborted) {
-    return failResult(options.pipeline, options.task, "Pipeline cancelled before execution", startTime);
+    return failResult(
+      options.pipeline,
+      options.task,
+      "Pipeline cancelled before execution",
+      startTime,
+    );
   }
 
   // Execution context
@@ -266,10 +290,20 @@ export async function runPipeline(
       if (stage.parallel && stage.parallel.length > 0) {
         // === PARALLEL STAGE ===
         if (ctx.hasUI) {
-          ctx.ui.setStatus("pipeline", `⚡ ${stageLabel} (parallel, ${stage.parallel.length} agents)`);
+          ctx.ui.setStatus(
+            "pipeline",
+            `⚡ ${stageLabel} (parallel, ${stage.parallel.length} agents)`,
+          );
         }
 
-        const parallelResult = await runParallelStage(pi, ctx, stage, options.task, outputs, stageSignal);
+        const parallelResult = await runParallelStage(
+          pi,
+          ctx,
+          stage,
+          options.task,
+          outputs,
+          stageSignal,
+        );
         const rawOutput = parallelResult.output;
         const stageOutput = await applyStageReport(pi, stage, rawOutput, options.task, stageSignal);
         outputs.set(stage.id, stageOutput);
@@ -287,7 +321,12 @@ export async function runPipeline(
         }
 
         const expandResult = await runExpandStage(
-          pi, ctx, stage, options.task, outputs, stageSignal,
+          pi,
+          ctx,
+          stage,
+          options.task,
+          outputs,
+          stageSignal,
         );
 
         if (expandResult.success) {
@@ -304,11 +343,21 @@ export async function runPipeline(
       } else if (stage.gate) {
         // === REVIEW GATE STAGE ===
         if (ctx.hasUI) {
-          ctx.ui.setStatus("pipeline", `🔍 ${stageLabel} (gate, max ${stage.gate.maxRounds} rounds)`);
+          ctx.ui.setStatus(
+            "pipeline",
+            `🔍 ${stageLabel} (gate, max ${stage.gate.maxRounds} rounds)`,
+          );
         }
 
         const gateResult = await runReviewGate(
-          pi, ctx, stage, options.task, outputs, lastFeedback, stageSignal,
+          pi,
+          ctx,
+          stage,
+          options.task,
+          outputs,
+          lastFeedback,
+          stageSignal,
+          pipeline.judgeModel,
         );
         const rawOutput = gateResult.output;
         const stageOutput = await applyStageReport(pi, stage, rawOutput, options.task, stageSignal);
@@ -331,7 +380,15 @@ export async function runPipeline(
           ctx.ui.setStatus("pipeline", `▶ ${stageLabel} (${stage.agent})`);
         }
 
-        const result = await runSingleStage(pi, ctx, stage, options.task, outputs, lastFeedback, stageSignal);
+        const result = await runSingleStage(
+          pi,
+          ctx,
+          stage,
+          options.task,
+          outputs,
+          lastFeedback,
+          stageSignal,
+        );
         const rawOutput = result;
         const stageOutput = await applyStageReport(pi, stage, rawOutput, options.task, stageSignal);
         outputs.set(stage.id, stageOutput);
@@ -458,15 +515,18 @@ export async function runSingleStage(
   const resolvedTask = resolveTemplate(stage.task ?? "", task, outputs, lastFeedback);
   const agentName = stage.agent!;
 
-  const response = await executeSubagent(pi, {
-    agent: agentName,
-    task: resolvedTask,
-    clarify: false,
-    model: stage.model,
-    agentScope: "both",
-    cwd: ctx.cwd,
-  }, signal);
-
+  const response = await executeSubagent(
+    pi,
+    {
+      agent: agentName,
+      task: resolvedTask,
+      clarify: false,
+      model: stage.model,
+      agentScope: "both",
+      cwd: ctx.cwd,
+    },
+    signal,
+  );
 
   if (response.isError) {
     throw new Error(`Agent "${agentName}" failed: ${response.errorText ?? "(unknown error)"}`);
@@ -502,12 +562,16 @@ export async function runParallelStage(
   }));
 
   // Use pi-subagents' parallel execution via the bridge
-  const response = await executeSubagent(pi, {
-    tasks: subagentTasks,
-    clarify: false,
-    agentScope: "both",
-    cwd: ctx.cwd,
-  }, signal);
+  const response = await executeSubagent(
+    pi,
+    {
+      tasks: subagentTasks,
+      clarify: false,
+      agentScope: "both",
+      cwd: ctx.cwd,
+    },
+    signal,
+  );
 
   const combinedOutput = extractResponseText(response);
 
@@ -607,7 +671,10 @@ export async function runExpandStage(
   const dynamicStages = buildExpandStages(stage, limitedItems, task, outputs);
 
   if (ctx.hasUI) {
-    ctx.ui.notify(`✦ Stage "${stage.id}": expanding into ${dynamicStages.length} parallel tasks`, "info");
+    ctx.ui.notify(
+      `✦ Stage "${stage.id}": expanding into ${dynamicStages.length} parallel tasks`,
+      "info",
+    );
   }
 
   // 5. Run all dynamic stages as parallel subagent tasks
@@ -619,12 +686,16 @@ export async function runExpandStage(
   }));
 
   try {
-    const response = await executeSubagent(pi, {
-      tasks: subagentTasks,
-      clarify: false,
-      agentScope: "both",
-      cwd: ctx.cwd,
-    }, signal);
+    const response = await executeSubagent(
+      pi,
+      {
+        tasks: subagentTasks,
+        clarify: false,
+        agentScope: "both",
+        cwd: ctx.cwd,
+      },
+      signal,
+    );
 
     const combinedOutput = extractResponseText(response);
 
@@ -639,12 +710,14 @@ export async function runExpandStage(
     }
 
     // Aggregate — prefix each task's output with its stage ID
-    const aggregated = dynamicStages.map((ds, i) => {
-      // Extract each task's output from combined output
-      // We split by known markers if available, or trust the raw combined output
-      return `### ${ds.id}
+    const aggregated = dynamicStages
+      .map((ds, i) => {
+        // Extract each task's output from combined output
+        // We split by known markers if available, or trust the raw combined output
+        return `### ${ds.id}
 ${extractTaskOutput(combinedOutput, i, dynamicStages.length)}`;
-    }).join("\n\n---\n\n");
+      })
+      .join("\n\n---\n\n");
 
     return {
       stageId: stage.id,
@@ -673,11 +746,7 @@ ${extractTaskOutput(combinedOutput, i, dynamicStages.length)}`;
  * by reasonable boundaries (double newlines) as a heuristic.
  */
 /** @internal Exported for testing. See pipeline-expand.test.ts */
-export function extractTaskOutput(
-  combined: string,
-  taskIndex: number,
-  totalTasks: number,
-): string {
+export function extractTaskOutput(combined: string, taskIndex: number, totalTasks: number): string {
   if (totalTasks <= 1) return combined.trim();
 
   // Split by double newlines as a heuristic for task boundaries
@@ -714,6 +783,7 @@ export async function runReviewGate(
   outputs: Map<string, string>,
   lastFeedback: string | undefined,
   signal?: AbortSignal,
+  pipelineJudgeModel?: string,
 ): Promise<StageResult & { lastFeedback?: string }> {
   const stageStart = Date.now();
   const agentName = stage.agent!;
@@ -723,47 +793,58 @@ export async function runReviewGate(
 
   for (let round = 1; round <= gate.maxRounds; round++) {
     if (ctx.hasUI) {
-      ctx.ui.notify(
-        `🔄 Stage "${stage.id}": round ${round}/${gate.maxRounds}`,
-        "info",
-      );
+      ctx.ui.notify(`🔄 Stage "${stage.id}": round ${round}/${gate.maxRounds}`, "info");
     }
 
-    // 1. Worker executes the task
+    // 1. Worker executes the task (with per-round timeout)
     const resolvedTask = resolveTemplate(stage.task ?? "", task, outputs, currentFeedback);
 
     if (signal?.aborted) throw signal.reason ?? new DOMException("Aborted", "AbortError");
 
-    const workerResponse = await executeSubagent(pi, {
-      agent: agentName,
-      task: resolvedTask,
-      clarify: false,
-      model: stage.model,
-      agentScope: "both",
-      cwd: ctx.cwd,
-    }, signal);
+    const workerSignal = signal
+      ? AbortSignal.any([signal, AbortSignal.timeout(GATE_WORKER_TIMEOUT_MS)])
+      : AbortSignal.timeout(GATE_WORKER_TIMEOUT_MS);
+
+    const workerResponse = await executeSubagent(
+      pi,
+      {
+        agent: agentName,
+        task: resolvedTask,
+        clarify: false,
+        model: stage.model,
+        agentScope: "both",
+        cwd: ctx.cwd,
+      },
+      workerSignal,
+    );
 
     if (workerResponse.isError) {
-      throw new Error(
-        `Worker round ${round} failed: ${workerResponse.errorText}`,
-      );
+      throw new Error(`Worker round ${round} failed: ${workerResponse.errorText}`);
     }
 
     lastOutput = extractResponseText(workerResponse);
 
-    // 2. Run reviewers in parallel
+    // 2. Run reviewers in parallel (with per-round timeout)
     const reviewerTasks = gate.reviewers.map((reviewer) => ({
       agent: reviewer.agent ?? "reviewer",
       task: buildReviewerTask(reviewer.focus, lastOutput, stage.id),
-      model: gate.judgeModel ?? stage.model,
+      model: gate.judgeModel ?? pipelineJudgeModel ?? stage.model,
     }));
 
-    const reviewsResponse = await executeSubagent(pi, {
-      tasks: reviewerTasks,
-      clarify: false,
-      agentScope: "both",
-      cwd: ctx.cwd,
-    }, signal);
+    const reviewerSignal = signal
+      ? AbortSignal.any([signal, AbortSignal.timeout(GATE_REVIEWER_TIMEOUT_MS)])
+      : AbortSignal.timeout(GATE_REVIEWER_TIMEOUT_MS);
+
+    const reviewsResponse = await executeSubagent(
+      pi,
+      {
+        tasks: reviewerTasks,
+        clarify: false,
+        agentScope: "both",
+        cwd: ctx.cwd,
+      },
+      reviewerSignal,
+    );
 
     // 3. Parse review outputs to extract scores
     const rawReviewOutput = extractResponseText(reviewsResponse);
@@ -771,7 +852,10 @@ export async function runReviewGate(
 
     const scores = reviews.map((r) => r.score);
     const average = scores.reduce((a, b) => a + b, 0) / scores.length;
-    const allFeedback = reviews.map((r) => r.feedback).filter(Boolean).join("\n\n");
+    const allFeedback = reviews
+      .map((r) => r.feedback)
+      .filter(Boolean)
+      .join("\n\n");
 
     if (ctx.hasUI) {
       ctx.ui.notify(
@@ -789,9 +873,11 @@ export async function runReviewGate(
         );
       }
 
-      const reviewSummary = reviews.map(
-        (r, i) => `### Reviewer ${i + 1}\n- Score: ${r.score}/10\n- ${r.feedback.slice(0, 500)}`,
-      ).join("\n\n");
+      const reviewSummary = reviews
+        .map(
+          (r, i) => `### Reviewer ${i + 1}\n- Score: ${r.score}/10\n- ${r.feedback.slice(0, 500)}`,
+        )
+        .join("\n\n");
 
       const finalOutput = `${lastOutput}\n\n---\n\n## Gate Review Passed (Round ${round})\n\n${reviewSummary}`;
 
@@ -935,18 +1021,22 @@ export function parseItems(output: string): StageItem[] {
     const parsed = JSON.parse(output);
     if (Array.isArray(parsed)) {
       return parsed.map((item: unknown) =>
-        typeof item === "string" ? { value: item } :
-        typeof item === "object" && item !== null ? item as StageItem :
-        { value: String(item) },
+        typeof item === "string"
+          ? { value: item }
+          : typeof item === "object" && item !== null
+            ? (item as StageItem)
+            : { value: String(item) },
       );
     }
     if (typeof parsed === "object" && parsed !== null) {
       const items = (parsed as Record<string, unknown>).items;
       if (Array.isArray(items)) {
         return items.map((item: unknown) =>
-          typeof item === "string" ? { value: item } :
-          typeof item === "object" && item !== null ? item as StageItem :
-          { value: String(item) },
+          typeof item === "string"
+            ? { value: item }
+            : typeof item === "object" && item !== null
+              ? (item as StageItem)
+              : { value: String(item) },
         );
       }
     }
@@ -959,9 +1049,11 @@ export function parseItems(output: string): StageItem[] {
     const parsed = yaml.load(output);
     if (Array.isArray(parsed)) {
       return parsed.map((item: unknown) =>
-        typeof item === "string" ? { value: item } :
-        typeof item === "object" && item !== null ? item as StageItem :
-        { value: String(item) },
+        typeof item === "string"
+          ? { value: item }
+          : typeof item === "object" && item !== null
+            ? (item as StageItem)
+            : { value: String(item) },
       );
     }
   } catch {
@@ -969,13 +1061,10 @@ export function parseItems(output: string): StageItem[] {
   }
 
   // Strategy 3: markdown list fallback
-  const lines = output.split("\n")
+  const lines = output
+    .split("\n")
     .map((l) => l.trim())
-    .filter((l) =>
-      l.startsWith("- ") ||
-      l.startsWith("* ") ||
-      /^\d+[.)]\s/.test(l),
-    )
+    .filter((l) => l.startsWith("- ") || l.startsWith("* ") || /^\d+[.)]\s/.test(l))
     .map((l) => l.replace(/^[-*]\s+/, "").replace(/^\d+[.)]\s+/, ""));
 
   if (lines.length > 0) {
@@ -994,10 +1083,7 @@ export function parseItems(output: string): StageItem[] {
  * value directly. For object items, {item} resolves to JSON.stringify.
  */
 /** @internal Exported for testing. See pipeline-expand.test.ts */
-export function expandItemTemplate(
-  template: string,
-  item: StageItem,
-): string {
+export function expandItemTemplate(template: string, item: StageItem): string {
   let result = template;
 
   // Replace {item.key} with the specific value
@@ -1102,7 +1188,9 @@ export function formatPipelineResult(result: PipelineResult): string {
   // --- Pipeline header ---
   lines.push(`# ${result.success ? "✅" : "❌"} Pipeline: ${result.pipelineName}`);
   lines.push(`Task: ${result.task}`);
-  lines.push(`Status: ${result.success ? "✅ PASSED" : "❌ FAILED"}  ·  ${result.stages.filter((s) => s.success).length}/${result.stages.length} stages passed  ·  ${formatDuration(result.totalDurationMs)}`);
+  lines.push(
+    `Status: ${result.success ? "✅ PASSED" : "❌ FAILED"}  ·  ${result.stages.filter((s) => s.success).length}/${result.stages.length} stages passed  ·  ${formatDuration(result.totalDurationMs)}`,
+  );
   lines.push("");
 
   // --- Synthesis report (prominently at the top) ---
@@ -1158,7 +1246,9 @@ export function buildPipelineContextMessage(result: PipelineResult): string {
   lines.push(`## \u2705 Pipeline Result: ${result.pipelineName}`);
   lines.push("");
   const icon = result.success ? "\u2705" : "\u274C";
-  lines.push(`**Status:** ${icon} ${result.success ? "PASSED" : "FAILED"}  \u00B7  ${result.stages.filter((s) => s.success).length}/${result.stages.length} stages passed  \u00B7  ${formatDuration(result.totalDurationMs)}`);
+  lines.push(
+    `**Status:** ${icon} ${result.success ? "PASSED" : "FAILED"}  \u00B7  ${result.stages.filter((s) => s.success).length}/${result.stages.length} stages passed  \u00B7  ${formatDuration(result.totalDurationMs)}`,
+  );
   if (result.task) lines.push(`**Task:** ${result.task}`);
   lines.push("");
 
@@ -1170,7 +1260,9 @@ export function buildPipelineContextMessage(result: PipelineResult): string {
   for (const stage of result.stages) {
     const stageIcon = stage.success ? "\u2705" : "\u274C";
     const duration = formatDuration(stage.durationMs);
-    lines.push(`| ${stage.stageId} | ${stage.stageId.includes("review") ? "reviewer" : stage.stageId.includes("stability") ? "worker" : "agent"} | ${stageIcon} ${stage.success ? "Pass" : "Fail"}${stage.rounds ? ` (${stage.rounds}r)` : ""}${stage.scores?.length ? ` [${stage.scores.join(", ")}]` : ""} | ${duration} |`);
+    lines.push(
+      `| ${stage.stageId} | ${stage.stageId.includes("review") ? "reviewer" : stage.stageId.includes("stability") ? "worker" : "agent"} | ${stageIcon} ${stage.success ? "Pass" : "Fail"}${stage.rounds ? ` (${stage.rounds}r)` : ""}${stage.scores?.length ? ` [${stage.scores.join(", ")}]` : ""} | ${duration} |`,
+    );
   }
   lines.push("");
 
@@ -1185,9 +1277,7 @@ export function buildPipelineContextMessage(result: PipelineResult): string {
       lines.push("```");
     }
     if (stage.output) {
-      const truncated = stage.output.length > 500
-        ? "..." + stage.output.slice(-500)
-        : stage.output;
+      const truncated = stage.output.length > 500 ? "..." + stage.output.slice(-500) : stage.output;
       lines.push("```");
       lines.push(truncated);
       lines.push("```");
@@ -1218,25 +1308,24 @@ export function buildPipelineContextMessage(result: PipelineResult): string {
   lines.push("Please analyze the pipeline results above and provide a narrative summary. Cover:");
   lines.push("");
   lines.push("1. **Overall outcome** \u2014 did the pipeline pass or fail? What does this mean?");
-  lines.push("2. **Stage breakdown** \u2014 which stages succeeded, which failed, and their key findings");
-  lines.push("3. **Key issues** \u2014 blocking issues, review scores, recommendations from each stage");
+  lines.push(
+    "2. **Stage breakdown** \u2014 which stages succeeded, which failed, and their key findings",
+  );
+  lines.push(
+    "3. **Key issues** \u2014 blocking issues, review scores, recommendations from each stage",
+  );
   lines.push("4. **Synthesis** \u2014 the pipeline\u2019s own assessment (if available)");
   lines.push("5. **Next steps** \u2014 what should be done next based on the results");
   lines.push("");
-  lines.push("Write your summary in the same language as this conversation. Be concise but informative.");
+  lines.push(
+    "Write your summary in the same language as this conversation. Be concise but informative.",
+  );
   lines.push("");
-  lines.push("If all stages passed, state that clearly. If any failed, explain what failed and why.");
+  lines.push(
+    "If all stages passed, state that clearly. If any failed, explain what failed and why.",
+  );
 
   return lines.join("\n");
-}
-
-/** @internal Exported for testing. See pipeline-runner.test.ts */
-export function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-  const min = Math.floor(ms / 60000);
-  const sec = ((ms % 60000) / 1000).toFixed(0);
-  return `${min}m ${sec}s`;
 }
 
 /** @internal Exported for testing. See pipeline-runner.test.ts */

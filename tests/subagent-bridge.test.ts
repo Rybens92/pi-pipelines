@@ -147,7 +147,10 @@ describe("isSubagentAvailable", () => {
  * Captures emitted "subagent:slash:request" payload.
  * The bridge times out after ~100ms (no bridge responder) — we catch that.
  */
-function mockPiForSlash(): { pi: never; emitted: Array<{ requestId: string; params: Record<string, unknown> }> } {
+function mockPiForSlash(): {
+  pi: never;
+  emitted: Array<{ requestId: string; params: Record<string, unknown> }>;
+} {
   const emitted: Array<{ requestId: string; params: Record<string, unknown> }> = [];
 
   const pi = {
@@ -172,10 +175,12 @@ describe("executeSubagent context defaulting", () => {
     const { pi, emitted } = mockPiForSlash();
 
     // The bridge will timeout → rejection. Catch it and inspect what was emitted.
-    await expect(executeSubagent(pi, {
-      agent: "worker",
-      task: "test task",
-    })).rejects.toThrow();
+    await expect(
+      executeSubagent(pi, {
+        agent: "worker",
+        task: "test task",
+      }),
+    ).rejects.toThrow();
 
     expect(emitted.length).toBe(1);
     const params = emitted[0]!.params;
@@ -185,12 +190,14 @@ describe("executeSubagent context defaulting", () => {
   it("defaults context to 'fresh' for parallel tasks when not specified", async () => {
     const { pi, emitted } = mockPiForSlash();
 
-    await expect(executeSubagent(pi, {
-      tasks: [
-        { agent: "worker", task: "task 1" },
-        { agent: "reviewer", task: "task 2" },
-      ],
-    })).rejects.toThrow();
+    await expect(
+      executeSubagent(pi, {
+        tasks: [
+          { agent: "worker", task: "task 1" },
+          { agent: "reviewer", task: "task 2" },
+        ],
+      }),
+    ).rejects.toThrow();
 
     expect(emitted.length).toBe(1);
     const params = emitted[0]!.params;
@@ -200,11 +207,13 @@ describe("executeSubagent context defaulting", () => {
   it("preserves explicit context 'fork' when set", async () => {
     const { pi, emitted } = mockPiForSlash();
 
-    await expect(executeSubagent(pi, {
-      agent: "worker",
-      task: "test task",
-      context: "fork",
-    })).rejects.toThrow();
+    await expect(
+      executeSubagent(pi, {
+        agent: "worker",
+        task: "test task",
+        context: "fork",
+      }),
+    ).rejects.toThrow();
 
     expect(emitted.length).toBe(1);
     const params = emitted[0]!.params;
@@ -214,11 +223,13 @@ describe("executeSubagent context defaulting", () => {
   it("preserves explicit context 'fresh' when set", async () => {
     const { pi, emitted } = mockPiForSlash();
 
-    await expect(executeSubagent(pi, {
-      agent: "worker",
-      task: "test task",
-      context: "fresh",
-    })).rejects.toThrow();
+    await expect(
+      executeSubagent(pi, {
+        agent: "worker",
+        task: "test task",
+        context: "fresh",
+      }),
+    ).rejects.toThrow();
 
     expect(emitted.length).toBe(1);
     const params = emitted[0]!.params;

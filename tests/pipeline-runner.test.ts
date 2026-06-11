@@ -63,7 +63,12 @@ describe("resolveTemplate", () => {
   });
 
   it("replaces {lastFeedback} when provided", () => {
-    const result = resolveTemplate("Fix: {lastFeedback}", "task", new Map(), "Need better error handling");
+    const result = resolveTemplate(
+      "Fix: {lastFeedback}",
+      "task",
+      new Map(),
+      "Need better error handling",
+    );
     expect(result).toBe("Fix: Need better error handling");
   });
 
@@ -461,7 +466,12 @@ describe("applyStageReport", () => {
 
   it("returns raw output when report mode is full", async () => {
     const output = "Raw output";
-    const result = await applyStageReport({} as never, { ...stage, report: { mode: "full" } }, output, "Scan files");
+    const result = await applyStageReport(
+      {} as never,
+      { ...stage, report: { mode: "full" } },
+      output,
+      "Scan files",
+    );
 
     expect(result).toBe(output);
     expect(mockBridge.executeSubagent).not.toHaveBeenCalled();
@@ -506,12 +516,7 @@ describe("applyStageReport", () => {
 
 describe("buildReportContext", () => {
   it("includes pipeline name, description, and task", () => {
-    const ctx = buildReportContext(
-      "my-pipe",
-      "A test pipeline",
-      "build feature X",
-      [],
-    );
+    const ctx = buildReportContext("my-pipe", "A test pipeline", "build feature X", []);
     expect(ctx).toContain("my-pipe");
     expect(ctx).toContain("A test pipeline");
     expect(ctx).toContain("build feature X");

@@ -7,11 +7,22 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import yaml from "js-yaml";
 
-import type { PipelineDef, Stage, ExpandConfig, ReviewGate, ReviewerDef, ReportConfig, StageReportConfig } from "./types.ts";
+import type {
+  PipelineDef,
+  Stage,
+  ExpandConfig,
+  ReviewGate,
+  ReviewerDef,
+  ReportConfig,
+  StageReportConfig,
+} from "./types.ts";
 
 /** Errors found during validation */
 class PipelineValidationError extends Error {
-  constructor(message: string, public readonly filePath?: string) {
+  constructor(
+    message: string,
+    public readonly filePath?: string,
+  ) {
     super(message);
     this.name = "PipelineValidationError";
   }
@@ -33,9 +44,10 @@ const DEFAULTS = {
 export function discoverPipelineFiles(pipelinesDir: string): string[] {
   try {
     if (!fs.existsSync(pipelinesDir)) return [];
-    return fs.readdirSync(pipelinesDir)
-      .filter(f => f.endsWith(".pipeline.yaml") || f.endsWith(".pipeline.yml"))
-      .map(f => path.join(pipelinesDir, f))
+    return fs
+      .readdirSync(pipelinesDir)
+      .filter((f) => f.endsWith(".pipeline.yaml") || f.endsWith(".pipeline.yml"))
+      .map((f) => path.join(pipelinesDir, f))
       .sort();
   } catch {
     return [];
@@ -62,10 +74,7 @@ export function findPipelineFile(pipelinesDir: string, name: string): string | n
 /**
  * Like findPipelineFile but searches multiple directories (first match wins).
  */
-export function searchPipelineFile(
-  dirs: string[],
-  name: string,
-): string | null {
+export function searchPipelineFile(dirs: string[], name: string): string | null {
   for (const dir of dirs) {
     const found = findPipelineFile(dir, name);
     if (found) return found;
@@ -94,7 +103,7 @@ export function listPipelinesFromDirs(dirs: string[]): { name: string; file: str
  * List all available pipeline names in a single directory.
  */
 export function listPipelines(pipelinesDir: string): { name: string; file: string }[] {
-  return discoverPipelineFiles(pipelinesDir).map(file => ({
+  return discoverPipelineFiles(pipelinesDir).map((file) => ({
     name: path.basename(file).replace(/\.pipeline\.(ya?ml)$/, ""),
     file,
   }));
@@ -108,28 +117,22 @@ export function loadPipeline(filePath: string): PipelineDef {
   let raw: string;
   try {
     raw = fs.readFileSync(filePath, "utf-8");
-  } catch (err) {
-    throw new PipelineValidationError(
-      `Cannot read pipeline file: ${filePath}`,
-      filePath,
-    );
+  } catch (_err) {
+    throw new PipelineValidationError(`Cannot read pipeline file: ${filePath}`, filePath);
   }
 
   let parsed: unknown;
   try {
     parsed = yaml.load(raw);
-  } catch (err) {
+  } catch (_err) {
     throw new PipelineValidationError(
-      `YAML parse error in ${filePath}: ${(err as Error).message}`,
+      `YAML parse error in ${filePath}: ${(_err as Error).message}`,
       filePath,
     );
   }
 
   if (typeof parsed !== "object" || parsed === null) {
-    throw new PipelineValidationError(
-      "Pipeline must be a YAML object (mapping)",
-      filePath,
-    );
+    throw new PipelineValidationError("Pipeline must be a YAML object (mapping)", filePath);
   }
 
   const data = parsed as Record<string, unknown>;
@@ -203,10 +206,7 @@ function validateStage(
   allowParallel = true,
 ): Stage {
   if (typeof data !== "object" || data === null) {
-    throw new PipelineValidationError(
-      `Stage #${index + 1} must be an object`,
-      filePath,
-    );
+    throw new PipelineValidationError(`Stage #${index + 1} must be an object`, filePath);
   }
 
   const stage = data as Record<string, unknown>;
@@ -234,8 +234,15 @@ function validateStage(
         filePath,
       );
     }
-    const children = stage.parallel.map((s, ci) => validateStage(s, ci, filePath, undefined, false));
-    return { id, task: undefined, parallel: children, report: validateStageReport(stage.report, id, filePath) };
+    const children = stage.parallel.map((s, ci) =>
+      validateStage(s, ci, filePath, undefined, false),
+    );
+    return {
+      id,
+      task: undefined,
+      parallel: children,
+      report: validateStageReport(stage.report, id, filePath),
+    };
   }
 
   // Simple agent stage
@@ -267,9 +274,8 @@ function validateStage(
   const model = typeof stage.model === "string" ? stage.model.trim() : undefined;
   const output = typeof stage.output === "string" ? stage.output.trim() : undefined;
   const reads = Array.isArray(stage.reads) ? stage.reads.map(String) : undefined;
-  const maxSubagentDepth = typeof stage.maxSubagentDepth === "number"
-    ? stage.maxSubagentDepth
-    : undefined;
+  const maxSubagentDepth =
+    typeof stage.maxSubagentDepth === "number" ? stage.maxSubagentDepth : undefined;
   const report = validateStageReport(stage.report, id, filePath);
 
   return { id, agent, task, expand, gate, model, output, reads, maxSubagentDepth, report };
@@ -305,9 +311,10 @@ function validateExpand(
 
   // Validate that `from` references an earlier stage in the pipeline
   if (prevStageIds && !prevStageIds.has(from)) {
-    const available = prevStageIds.size > 0
-      ? ` Available stages before "${stageId}": ${[...prevStageIds].join(", ")}`
-      : " No stages before this one.";
+    const available =
+      prevStageIds.size > 0
+        ? ` Available stages before "${stageId}": ${[...prevStageIds].join(", ")}`
+        : " No stages before this one.";
     throw new PipelineValidationError(
       `Stage "${stageId}": expand.from "${from}" does not match any stage defined before "${stageId}".${available}`,
       filePath,
@@ -388,10 +395,7 @@ function validateStageReport(
  */
 function validateGate(data: unknown, stageId: string, filePath?: string): ReviewGate {
   if (typeof data !== "object" || data === null) {
-    throw new PipelineValidationError(
-      `Stage "${stageId}": gate must be an object`,
-      filePath,
-    );
+    throw new PipelineValidationError(`Stage "${stageId}": gate must be an object`, filePath);
   }
 
   const gate = data as Record<string, unknown>;

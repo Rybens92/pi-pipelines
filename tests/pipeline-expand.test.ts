@@ -91,10 +91,7 @@ describe("parseItems", () => {
   });
 
   it("parses markdown bullet list (asterisk)", () => {
-    const output = [
-      "* Item one",
-      "* Item two",
-    ].join("\n");
+    const output = ["* Item one", "* Item two"].join("\n");
     const items = parseItems(output);
     expect(items).toHaveLength(2);
     expect(items[0]!.value).toBe("Item one");
@@ -170,18 +167,15 @@ describe("expandItemTemplate", () => {
   });
 
   it("handles multiple {item.*} variables in one template", () => {
-    const result = expandItemTemplate(
-      "Refactor {item.path}: {item.reason}",
-      { path: "src/a.ts", reason: "duplication" },
-    );
+    const result = expandItemTemplate("Refactor {item.path}: {item.reason}", {
+      path: "src/a.ts",
+      reason: "duplication",
+    });
     expect(result).toBe("Refactor src/a.ts: duplication");
   });
 
   it("handles undefined item keys gracefully (leaves placeholder)", () => {
-    const result = expandItemTemplate(
-      "Path: {item.path}, Risk: {item.risk}",
-      { path: "src/a.ts" },
-    );
+    const result = expandItemTemplate("Path: {item.path}, Risk: {item.risk}", { path: "src/a.ts" });
     expect(result).toBe("Path: src/a.ts, Risk: {item.risk}");
   });
 
@@ -191,18 +185,12 @@ describe("expandItemTemplate", () => {
   });
 
   it("preserves non-item template variables unchanged", () => {
-    const result = expandItemTemplate(
-      "{task}: {item.path}",
-      { path: "src/a.ts" },
-    );
+    const result = expandItemTemplate("{task}: {item.path}", { path: "src/a.ts" });
     expect(result).toBe("{task}: src/a.ts");
   });
 
   it("handles items with numeric keys", () => {
-    const result = expandItemTemplate(
-      "Item {item.id}: {item.name}",
-      { id: 3, name: "test" },
-    );
+    const result = expandItemTemplate("Item {item.id}: {item.name}", { id: 3, name: "test" });
     expect(result).toBe("Item 3: test");
   });
 
@@ -310,10 +298,7 @@ describe("buildExpandStages", () => {
       agent: "worker",
       task: "Process {item.value}",
     };
-    const stringItems = [
-      { value: "file1.ts" },
-      { value: "file2.ts" },
-    ];
+    const stringItems = [{ value: "file1.ts" }, { value: "file2.ts" }];
     const stages = buildExpandStages(stage, stringItems, "task", emptyOutputs);
     expect(stages[0]!.task).toBe("Process file1.ts");
     expect(stages[1]!.task).toBe("Process file2.ts");
@@ -326,7 +311,12 @@ describe("buildExpandStages", () => {
       task: "{item.path}",
       output: "result.txt",
     };
-    const stages = buildExpandStages(stageWithOutput, [{ path: "a.ts" }, { path: "b.ts" }], "task", emptyOutputs);
+    const stages = buildExpandStages(
+      stageWithOutput,
+      [{ path: "a.ts" }, { path: "b.ts" }],
+      "task",
+      emptyOutputs,
+    );
     expect(stages[0]!.output).toBe("result.txt");
     expect(stages[1]!.output).toBe("result.txt");
   });
@@ -384,12 +374,7 @@ describe("parseItems — edge cases", () => {
   });
 
   it("parses markdown list with mixed content after the list", () => {
-    const output = [
-      "- file1.ts",
-      "- file2.ts",
-      "",
-      "Summary: 2 files found",
-    ].join("\n");
+    const output = ["- file1.ts", "- file2.ts", "", "Summary: 2 files found"].join("\n");
     const items = parseItems(output);
     expect(items).toHaveLength(2);
   });

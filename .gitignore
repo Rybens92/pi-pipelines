@@ -29,3 +29,7 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
+
+# Generated pipeline reports
+context.md
+*.report.md

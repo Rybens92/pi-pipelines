@@ -18,11 +18,15 @@
 import * as path from "node:path";
 import * as fs from "node:fs";
 import * as os from "node:os";
-import type { ExtensionAPI, ExtensionContext, AgentToolUpdateCallback } from "@earendil-works/pi-coding-agent";
+import type {
+  ExtensionAPI,
+  ExtensionContext,
+  AgentToolUpdateCallback,
+} from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
 import { fileURLToPath } from "node:url";
-import { listPipelines, loadPipeline, findPipelineFile, listPipelinesFromDirs } from "./config-loader.ts";
+import { loadPipeline, findPipelineFile, listPipelinesFromDirs } from "./config-loader.ts";
 
 /** Extension's own bundled pipelines directory */
 const BUNDLED_PIPELINES_DIR = path.resolve(
@@ -40,8 +44,7 @@ const USER_GLOBAL_PIPELINES_DIR = path.join(os.homedir(), ".pi", "pipelines");
 function getPipelineDirs(cwd: string): string[] {
   const dirs: string[] = [];
   const projectDir = path.join(cwd, ".pi/pipelines");
-  if (projectDir !== USER_GLOBAL_PIPELINES_DIR &&
-      projectDir !== BUNDLED_PIPELINES_DIR) {
+  if (projectDir !== USER_GLOBAL_PIPELINES_DIR && projectDir !== BUNDLED_PIPELINES_DIR) {
     dirs.push(projectDir);
   }
   if (USER_GLOBAL_PIPELINES_DIR !== BUNDLED_PIPELINES_DIR) {
@@ -62,17 +65,15 @@ function seedUserPipelines(): void {
     for (const file of fs.readdirSync(BUNDLED_PIPELINES_DIR)) {
       const target = path.join(USER_GLOBAL_PIPELINES_DIR, file);
       if (!fs.existsSync(target)) {
-        fs.copyFileSync(
-          path.join(BUNDLED_PIPELINES_DIR, file),
-          target,
-        );
+        fs.copyFileSync(path.join(BUNDLED_PIPELINES_DIR, file), target);
       }
     }
   } catch {
     // Best effort — user global dir might not be writable.
   }
 }
-import { runPipeline, formatPipelineResult, buildPipelineContextMessage, formatDuration } from "./pipeline-runner.ts";
+import { runPipeline, buildPipelineContextMessage } from "./pipeline-runner.ts";
+import { formatDuration } from "./utils.ts";
 import type { PipelineResult } from "./types.ts";
 
 /** Widget key for the pipeline status widget */
@@ -216,29 +217,21 @@ export default function registerPipelinesExtension(pi: ExtensionAPI): void {
       const pipelines = listPipelinesFromDirs(dirs);
 
       if (pipelines.length === 0) {
-        ctx.ui.notify(
-          `No pipelines found in ${dirs.join(" or ")}/`,
-          "info",
-        );
+        ctx.ui.notify(`No pipelines found in ${dirs.join(" or ")}/`, "info");
         return;
       }
 
       const lines = pipelines.map((p) => {
         try {
           const def = loadPipeline(p.file);
-          const stagesInfo = def.stages
-            .map((s) => (s.gate ? `${s.id} [gate]` : s.id))
-            .join(" → ");
+          const stagesInfo = def.stages.map((s) => (s.gate ? `${s.id} [gate]` : s.id)).join(" → ");
           return `  /pipeline-${p.name}\n    ${def.description}\n    Stages: ${stagesInfo}`;
         } catch {
           return `  /pipeline-${p.name}\n    (invalid pipeline file)`;
         }
       });
 
-      ctx.ui.notify(
-        `Available pipelines (${pipelines.length}):\n\n${lines.join("\n\n")}`,
-        "info",
-      );
+      ctx.ui.notify(`Available pipelines (${pipelines.length}):\n\n${lines.join("\n\n")}`, "info");
     },
   });
 
@@ -264,8 +257,7 @@ export default function registerPipelinesExtension(pi: ExtensionAPI): void {
           "Pipeline name — searched in .pi/pipelines/ (project), ~/.pi/pipelines/ (global), then extension bundled",
       }),
       task: Type.String({
-        description:
-          "Task description passed through {task} to pipeline stages",
+        description: "Task description passed through {task} to pipeline stages",
       }),
     }),
     async execute(
@@ -379,10 +371,7 @@ export default function registerPipelinesExtension(pi: ExtensionAPI): void {
       let filtered = all;
       if (params.query) {
         const q = params.query.toLowerCase();
-        filtered = all.filter(
-          (p) =>
-            p.name.toLowerCase().includes(q),
-        );
+        filtered = all.filter((p) => p.name.toLowerCase().includes(q));
       }
 
       const details = filtered.map((p) => {
@@ -417,9 +406,7 @@ export default function registerPipelinesExtension(pi: ExtensionAPI): void {
         content: [
           {
             type: "text" as const,
-            text:
-              `Available pipelines (${details.length}):\n${lines.join("\n")}`
-                .trim(),
+            text: `Available pipelines (${details.length}):\n${lines.join("\n")}`.trim(),
           },
         ],
         details: { pipelines: details } as Record<string, unknown>,
@@ -458,5 +445,3 @@ function buildWidgetLines(result: PipelineResult): string[] {
 
   return lines;
 }
-
-

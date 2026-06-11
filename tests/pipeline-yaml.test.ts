@@ -101,7 +101,9 @@ describe("shipped pipeline YAML files", () => {
 });
 
 /** Get all stage IDs including nested parallel stages */
-function flattenStageIds(stages: Array<{ id: string; parallel?: Array<{ id: string }> }>): string[] {
+function flattenStageIds(
+  stages: Array<{ id: string; parallel?: Array<{ id: string }> }>,
+): string[] {
   const ids: string[] = [];
   for (const s of stages) {
     ids.push(s.id);
@@ -155,7 +157,9 @@ describe("specific pipeline structures", () => {
     expect(parallelStages).toHaveLength(1);
     expect(parallelStages[0]!.id).toBe("project-review");
     expect(parallelStages[0]!.parallel).toHaveLength(3);
-    expect(parallelStages[0]!.parallel!.find((c) => c.id === "next-priorities")!.agent).toBe("planner");
+    expect(parallelStages[0]!.parallel!.find((c) => c.id === "next-priorities")!.agent).toBe(
+      "planner",
+    );
     expect(pipeline.stages[5]!.task).toContain("{outputs.verify}");
     expect(pipeline.report).toBeDefined();
     expect(pipeline.report).not.toBe(false);

@@ -94,13 +94,16 @@ function errorResponse(errorText: string) {
 
 describe("runPipeline — abort scenarios", () => {
   it("returns immediately with cancelled status when signal is pre-aborted", async () => {
-    writePipeline("simple", `name: simple
+    writePipeline(
+      "simple",
+      `name: simple
 description: "Simple"
 stages:
   - id: s1
     agent: worker
     task: "Do it"
-`);
+`,
+    );
 
     const controller = new AbortController();
     controller.abort(); // Pre-abort
@@ -119,7 +122,9 @@ stages:
   });
 
   it("returns partial results when abort fires during a stage", async () => {
-    writePipeline("two-stage", `name: two-stage
+    writePipeline(
+      "two-stage",
+      `name: two-stage
 description: "Two stages"
 stages:
   - id: s1
@@ -128,7 +133,8 @@ stages:
   - id: s2
     agent: worker
     task: "Second"
-`);
+`,
+    );
 
     const controller = new AbortController();
 
@@ -156,7 +162,9 @@ stages:
   });
 
   it("returns partial results when abort fires during review gate", async () => {
-    writePipeline("gate-abort", `name: gate-abort
+    writePipeline(
+      "gate-abort",
+      `name: gate-abort
 description: "Gate abort test"
 stages:
   - id: before
@@ -171,7 +179,8 @@ stages:
       targetScore: 7
       reviewers:
         - focus: "Check it"
-`);
+`,
+    );
 
     const controller = new AbortController();
 
@@ -199,7 +208,9 @@ stages:
   });
 
   it("includes completed stages before abort point in partial results", async () => {
-    writePipeline("three-stage", `name: three-stage
+    writePipeline(
+      "three-stage",
+      `name: three-stage
 description: "Three stages"
 stages:
   - id: plan
@@ -211,7 +222,8 @@ stages:
   - id: review
     agent: reviewer
     task: "Review"
-`);
+`,
+    );
 
     const controller = new AbortController();
 
@@ -240,7 +252,9 @@ stages:
   });
 
   it("handles stage error differently from abort", async () => {
-    writePipeline("err-vs-abort", `name: err-vs-abort
+    writePipeline(
+      "err-vs-abort",
+      `name: err-vs-abort
 description: "Error vs abort"
 stages:
   - id: good
@@ -249,7 +263,8 @@ stages:
   - id: bad
     agent: worker
     task: "Bad"
-`);
+`,
+    );
 
     // Stage failure (not abort)
     mockBridge.executeSubagent
@@ -366,7 +381,8 @@ describe("formatPipelineResult — error UX quality", () => {
         },
       ],
       totalDurationMs: 100,
-      error: 'Stage "security-scan" failed: Agent "reviewer" failed: npm audit found 5 critical vulnerabilities',
+      error:
+        'Stage "security-scan" failed: Agent "reviewer" failed: npm audit found 5 critical vulnerabilities',
     };
 
     const formatted = formatPipelineResult(result);
@@ -440,9 +456,7 @@ describe("PipelineResult — partial results after failure", () => {
       pipelineName: "p",
       task: "t",
       success: true,
-      stages: [
-        { stageId: "s1", success: true, output: "Hello", durationMs: 50 },
-      ],
+      stages: [{ stageId: "s1", success: true, output: "Hello", durationMs: 50 }],
       totalDurationMs: 50,
     };
 
@@ -464,12 +478,13 @@ describe("PipelineResult — partial results after failure", () => {
           stageId: "compile",
           success: false,
           output: "",
-          error: "Agent \"worker\" failed: TypeScript compilation error in src/index.ts",
+          error: 'Agent "worker" failed: TypeScript compilation error in src/index.ts',
           durationMs: 100,
         },
       ],
       totalDurationMs: 100,
-      error: 'Stage "compile" failed: Agent "worker" failed: TypeScript compilation error in src/index.ts',
+      error:
+        'Stage "compile" failed: Agent "worker" failed: TypeScript compilation error in src/index.ts',
     };
 
     // The error must contain both the agent name and the root cause
@@ -479,7 +494,9 @@ describe("PipelineResult — partial results after failure", () => {
   });
 
   it("sends warning notification when pipeline is aborted with UI enabled", async () => {
-    writePipeline("ui-abort", `name: ui-abort
+    writePipeline(
+      "ui-abort",
+      `name: ui-abort
 description: "UI abort test"
 stages:
   - id: s1
@@ -488,7 +505,8 @@ stages:
   - id: s2
     agent: worker
     task: "Stage 2"
-`);
+`,
+    );
 
     const setStatus = vi.fn();
     const notify = vi.fn();
@@ -502,35 +520,31 @@ stages:
         throw new DOMException("The operation was aborted", "AbortError");
       });
 
-    const result = await runPipeline(
-      mockAPI(),
-      mockContext({ hasUI: true, ui }),
-      {
-        pipeline: "ui-abort",
-        task: "test",
-        signal: controller.signal,
-      },
-    );
+    const result = await runPipeline(mockAPI(), mockContext({ hasUI: true, ui }), {
+      pipeline: "ui-abort",
+      task: "test",
+      signal: controller.signal,
+    });
 
     expect(result.success).toBe(false);
     expect(result.stages).toHaveLength(1);
     expect(result.stages[0]!.stageId).toBe("s1");
     expect(result.stages[0]!.success).toBe(true);
 
-    expect(notify).toHaveBeenCalledWith(
-      expect.stringContaining("cancelled"),
-      "warning",
-    );
+    expect(notify).toHaveBeenCalledWith(expect.stringContaining("cancelled"), "warning");
   });
 
   it("respects stageTimeoutMs and aborts slow stages", async () => {
-    writePipeline("timeout-test", `name: timeout-test
+    writePipeline(
+      "timeout-test",
+      `name: timeout-test
 description: "Timeout test"
 stages:
   - id: s1
     agent: worker
     task: "Slow task"
-`);
+`,
+    );
 
     // Mock that listens to signal — if it fires before work completes, reject
     mockBridge.executeSubagent.mockImplementationOnce(
@@ -539,10 +553,14 @@ stages:
         // Simulate work that respects the abort signal
         await new Promise<void>((resolve, reject) => {
           const finish = setTimeout(() => resolve(), 200);
-          signal?.addEventListener("abort", () => {
-            clearTimeout(finish);
-            reject(signal.reason ?? new DOMException("Aborted by signal", "AbortError"));
-          }, { once: true });
+          signal?.addEventListener(
+            "abort",
+            () => {
+              clearTimeout(finish);
+              reject(signal.reason ?? new DOMException("Aborted by signal", "AbortError"));
+            },
+            { once: true },
+          );
         });
         return successResponse("Done");
       },

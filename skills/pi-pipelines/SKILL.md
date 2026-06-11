@@ -1,8 +1,10 @@
 ---
 description: >
-  Create YAML pipelines for the pi-pipelines extension: locations, format,
-  stage types, scoring review gates, template variables, agent recommendations,
-  testing, and examples.
+  Create, validate, and manage YAML pipeline definitions for the pi-pipelines
+  extension. Covers pipeline format, stage types, review gates, dynamic
+  expansion, template variables, agent recommendations, best practices, and
+  testing. Use this skill when asked to create, modify, explain, or debug
+  a pipeline, or to generate YAML definitions.
 ---
 
 # Pi Pipelines — Creating Custom Pipelines
@@ -44,13 +46,15 @@ stages:
     task: "Create a plan based on: {outputs.explore}"
 ```
 
-### Required fields
+### Required and optional pipeline fields
 
-| Field | Description |
-|---|---|
-| `name` | Pipeline name, used as `/pipeline-<name>` |
-| `description` | Description shown by `/list-pipelines` |
-| `stages[]` | List of stages to execute |
+| Field | Required | Description |
+|---|---|---|
+| `name` | ✅ | Pipeline name, used as `/pipeline-<name>` |
+| `description` | ✅ | Description shown by `/list-pipelines` |
+| `stages[]` | ✅ | List of stages to execute |
+| `report` | ❌ | Synthesis config — `{ agent, focus }` or `false` to disable |
+| `version` | ❌ | Schema version (reserved for future use) |
 
 ### Every stage requires:
 
@@ -102,7 +106,7 @@ Without that reference, the stage runs in isolation.
 - id: analyze
   agent: planner
   task: "Create a plan: {task}"
-  model: "anthropic/claude-sonnet-4"    # optional model override
+  # model: "..."   # optional: override the model for this stage
 ```
 
 ### 4b. Parallel Stage — multiple agents at once
@@ -166,30 +170,17 @@ Each child output is also available under its own child ID, for example `{output
       - focus: "Are the tests production-ready?"
 ```
 
+**Review gate fields:**
+
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `type` | ✅ | — | Must be `"review-loop"` |
+| `maxRounds` | ❌ | `3` | Max worker→review→fix iterations |
+| `targetScore` | ❌ | `8` | Minimum average score (0–10) to pass |
+| `reviewers` | ✅ | — | Array of reviewer configs, each with `focus` string |
+| `judgeModel` | ❌ | Pi's default model | **Advanced.** Override model for reviewers (see section 9b) |
+
 **How a review gate works:**
-
-```
-Round 1: Worker runs the task
-         ↓
-         Parallel reviewers receive the output + focus
-         ↓
-         Each reviewer ends with "SCORE: N" (0-10)
-         ↓
-         Average score: (8 + 7 + 9) / 3 = 8.0
-         ↓
-         8.0 < 9.0? → ⚠ Feedback → Round 2 with fixes
-
-Round 2: Worker receives {lastFeedback} → improves the work
-         ↓
-         Reviewers score again
-         ↓
-         9.3 >= 9.0? → ✅ PASS
-
-If the score is still below target after maxRounds → ❌ FAIL
-```
-
-**Cross-model judging:** reviewers should use a different model than the worker to reduce the bias of "checking your own work."
-Set `model` on the stage, or configure it in pi-subagents.
 
 ---
 
@@ -329,7 +320,6 @@ stages:
     task: >
       Explore the code structure for: {task}.
       List all files that need review.
-    model: "deepseek/deepseek-v4-flash"
 
   - id: review
     agent: reviewer
@@ -515,6 +505,7 @@ The other agents (`scout`, `planner`, `reviewer`, `oracle`) are read-only.
 - Use `targetScore: 8` for code because code can be "good enough" for a first pass.
 - Use `maxRounds: 2-3`; more rounds are usually not worth the time.
 - Use 2-3 reviewers per gate. One reviewer is too little; 4+ is usually overkill.
+- **`judgeModel` — zaawansowane, nie używaj domyślnie.** To pole istnieje dla zaawansowanych użytkowników którzy chcą wymusić inny model dla recenzentów (tzw. cross-model judging). W większości przypadków **nie ustawiaj go** — Pi użyje swojego domyślnego modelu i to jest w porządku. Skup się na `targetScore` i `reviewers`, nie na `judgeModel`.
 
 ### 9c. Template variables in tasks
 - Always use `{outputs.previousStage}` when the next agent needs context.
@@ -529,9 +520,9 @@ The other agents (`scout`, `planner`, `reviewer`, `oracle`) are read-only.
 - JSON with an `items` key (`{"items": [...]}`) is the safest format because agents can generate it easily.
 
 ### 9e. Models
-- Set `model` on stages that require a specific model.
-- Reviewers should use a different model than the worker for cross-model judging.
-- For quick pipelines such as `hello-world`, do not set a model; let the default model run.
+- W większości przypadków **nie ustawiaj `model` ani `judgeModel`** — Pi użyje domyślnego modelu, który jest skonfigurowany przez użytkownika.
+- Pole `model` na stage'u istnieje dla zaawansowanych przypadków, gdy konkretny stage wymaga konkretnego modelu.
+- Pole `judgeModel` to jeszcze bardziej zaawansowana opcja — nie przejmuj się nią przy tworzeniu pipeline'ów.
 
 ### 9f. Pipeline structure
 - 2-6 stages is a good default.

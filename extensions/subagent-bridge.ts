@@ -18,8 +18,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import * as path from "node:path";
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 /** Request params expected by pi-subagents' slash bridge */
 interface SubagentSlashParams {
@@ -116,6 +115,7 @@ export async function executeSubagent(
       } catch (execErr) {
         throw new Error(
           `Subagent execution failed (bridge+fallback): ${(execErr as Error).message}`,
+          { cause: execErr },
         );
       }
     }
@@ -166,10 +166,14 @@ function tryBridge(
       clearTimeout(startTimeout);
       try {
         unsubStarted?.();
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
       try {
         unsubResponse?.();
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     };
 
     if (signal) {
@@ -178,14 +182,18 @@ function tryBridge(
         reject(new Error("Aborted"));
         return;
       }
-      signal.addEventListener("abort", () => {
-        if (!done) {
-          pi.events.emit("subagent:slash:cancel", { requestId });
-          cleanup();
-          done = true;
-          reject(new Error("Aborted"));
-        }
-      }, { once: true });
+      signal.addEventListener(
+        "abort",
+        () => {
+          if (!done) {
+            pi.events.emit("subagent:slash:cancel", { requestId });
+            cleanup();
+            done = true;
+            reject(new Error("Aborted"));
+          }
+        },
+        { once: true },
+      );
     }
 
     const unsubStarted = pi.events.on("subagent:slash:started", onStarted);
@@ -198,9 +206,11 @@ function tryBridge(
       if (!started && !done) {
         cleanup();
         done = true;
-        reject(new Error(
-          "No subagent bridge responded. Ensure pi-subagents is installed (pi install npm:pi-subagents).",
-        ));
+        reject(
+          new Error(
+            "No subagent bridge responded. Ensure pi-subagents is installed (pi install npm:pi-subagents).",
+          ),
+        );
       }
     }, 100);
   });
@@ -256,18 +266,14 @@ export function extractResponseText(response: SlashResponse): string {
   const content = response.result?.content;
   if (typeof content === "string" && content.length > 0) return content;
   if (Array.isArray(content)) {
-    const texts = content
-      .filter((c) => c.type === "text")
-      .map((c) => c.text);
+    const texts = content.filter((c) => c.type === "text").map((c) => c.text);
     if (texts.length > 0) return texts.join("\n");
   }
 
   // Try details
   const details = response.result?.details;
   if (details?.results?.length) {
-    const outputs = details.results
-      .map((r) => r.output ?? "")
-      .filter(Boolean);
+    const outputs = details.results.map((r) => r.output ?? "").filter(Boolean);
     if (outputs.length > 0) return outputs.join("\n\n");
   }
 
@@ -277,7 +283,7 @@ export function extractResponseText(response: SlashResponse): string {
 /**
  * Check if pi-subagents is available by probing the event bus.
  */
-export function isSubagentAvailable(pi: ExtensionAPI): boolean {
+export function isSubagentAvailable(_pi: ExtensionAPI): boolean {
   // We can probe by emitting a quick test or checking a known event handler
   // Simple heuristic: check if the slash request event can be emitted
   // (we can't directly check, but we'll learn from errors)

@@ -2,8 +2,9 @@
  * TUI Widgets — rendering for pipeline progress and results
  */
 
-import { Container, Text, Spacer } from "@earendil-works/pi-tui";
+import { Container, Spacer, Text } from "@earendil-works/pi-tui";
 import type { PipelineResult } from "./types.ts";
+import { formatDuration } from "./utils.ts";
 
 export type ThemeAccessor = {
   fg: (category: string, text: string) => string;
@@ -24,9 +25,17 @@ export function createPipelineResultComponent(
   // Header
   const statusIcon = result.success ? "✅" : "❌";
   const headerText = theme.fg("toolTitle", theme.bold(`Pipeline: ${result.pipelineName}`));
-  container.addChild(new Text(`${headerText} ${theme.fg(result.success ? "success" : "error", `[${statusIcon}]`)}`, 0, 0));
+  container.addChild(
+    new Text(
+      `${headerText} ${theme.fg(result.success ? "success" : "error", `[${statusIcon}]`)}`,
+      0,
+      0,
+    ),
+  );
   container.addChild(new Text(theme.fg("dim", `Task: ${result.task}`), 0, 0));
-  container.addChild(new Text(theme.fg("dim", `Duration: ${formatDurationWidget(result.totalDurationMs)}`), 0, 0));
+  container.addChild(
+    new Text(theme.fg("dim", `Duration: ${formatDuration(result.totalDurationMs)}`), 0, 0),
+  );
   container.addChild(new Text("", 0, 0));
 
   // Stages
@@ -41,7 +50,7 @@ export function createPipelineResultComponent(
     if (stage.scores?.length) {
       meta += ` ${theme.fg("accent", `[${stage.scores.join(",")}]`)}`;
     }
-    meta += ` ${theme.fg("dim", formatDurationWidget(stage.durationMs))}`;
+    meta += ` ${theme.fg("dim", formatDuration(stage.durationMs))}`;
 
     container.addChild(new Text(`${icon} ${name}${meta}`, 0, 0));
 
@@ -56,12 +65,4 @@ export function createPipelineResultComponent(
   }
 
   return container;
-}
-
-function formatDurationWidget(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-  const min = Math.floor(ms / 60000);
-  const sec = ((ms % 60000) / 1000).toFixed(0);
-  return `${min}m ${sec}s`;
 }

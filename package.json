@@ -2,17 +2,29 @@
   "name": "pi-pipelines",
   "version": "0.1.0",
   "description": "Pi extension for defining and running multi-agent pipelines with review gates, loops, and scoring — powered by pi-subagents",
-  "author": "Pi Pipelines",
+  "author": "Rybens92",
   "license": "MIT",
+  "type": "module",
+  "main": "./extensions/index.ts",
+  "exports": {
+    ".": "./extensions/index.ts"
+  },
+  "files": [
+    "extensions/",
+    "pipelines/",
+    "skills/",
+    "CHANGELOG.md",
+    "LICENSE",
+    "README.md"
+  ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/nicobailon/pi-pipelines.git"
+    "url": "git+https://github.com/Rybens92/pi-pipelines.git"
   },
   "bugs": {
-    "url": "https://github.com/nicobailon/pi-pipelines/issues"
+    "url": "https://github.com/Rybens92/pi-pipelines/issues"
   },
-  "homepage": "https://github.com/nicobailon/pi-pipelines#readme",
-  "type": "module",
+  "homepage": "https://github.com/Rybens92/pi-pipelines#readme",
   "engines": {
     "node": ">=20.0.0"
   },
@@ -30,8 +42,7 @@
     ],
     "skills": [
       "./skills"
-    ],
-    "image": "https://raw.githubusercontent.com/nicobailon/pi-subagents/main/banner.png"
+    ]
   },
   "dependencies": {
     "js-yaml": "^4.1.0"
@@ -45,13 +56,24 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint extensions/ tests/",
+    "lint:fix": "eslint --fix extensions/ tests/",
+    "format": "prettier --write 'extensions/**/*.ts' 'tests/**/*.ts'",
+    "format:check": "prettier --check 'extensions/**/*.ts' 'tests/**/*.ts'",
+    "check": "pnpm lint && pnpm format:check && pnpm test",
+    "prepublishOnly": "pnpm check"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^25.9.2",
     "@vitest/coverage-v8": "^4.1.8",
+    "eslint": "^10.4.1",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.8.4",
     "typescript": "^6.0.3",
+    "typescript-eslint": "^8.61.0",
     "vitest": "^4.1.8"
   }
 }
