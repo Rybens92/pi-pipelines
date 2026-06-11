@@ -1,0 +1,60 @@
+name: release-check
+description: "Pre-release quality gate — parallel code review, security audit, stability verification, and readiness decision."
+report:
+  agent: scout
+  focus: "release readiness assessment and blocked issues"
+
+
+stages:
+  - id: checks
+    parallel:
+      - id: code-review
+        agent: reviewer
+        task: >
+          Perform a thorough code review of recent changes for: {task}.
+          Check for bugs, correctness, readability, architecture fit, error handling,
+          test coverage, and adherence to project standards.
+          Return a concise report starting with `### Code Review`:
+          findings, severity, affected files, and recommended fixes.
+
+      - id: security-audit
+        agent: reviewer
+        task: >
+          Security audit focused on: {task}.
+          Check for:
+          - Injection vulnerabilities
+          - Authentication/authorization issues
+          - Sensitive data exposure
+          - Dependency vulnerabilities
+          - Unsafe code patterns
+          Return a concise report starting with `### Security Audit`:
+          vulnerabilities, severity, evidence, and remediation priority.
+
+      - id: stability-check
+        agent: worker
+        task: >
+          Run the full project test suite using the existing package manager or test scripts.
+          Report:
+          - Total tests passed/failed
+          - Any flaky or slow tests
+          - Test duration
+          - Code coverage if available
+          - Commands attempted and blockers
+          Project context: {task}
+          Return a concise report starting with `### Stability Check`.
+
+  - id: release-readiness
+    agent: reviewer
+    task: >
+      Based on the following reports, assess overall release readiness for: {task}.
+
+      Code Review: {outputs.code-review}
+      Security Audit: {outputs.security-audit}
+      Stability: {outputs.stability-check}
+
+      Give:
+      1. Overall readiness score (1-10)
+      2. Blocking issues that must be fixed before release
+      3. Recommended issues to fix soon
+      4. Clear Go/No-Go recommendation
+      5. Short rationale

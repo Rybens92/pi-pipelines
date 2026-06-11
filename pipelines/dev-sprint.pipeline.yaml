@@ -1,0 +1,104 @@
+name: dev-sprint
+description: "Complete development cycle: plan → TDD with review gates → test → project review and next actions."
+report:
+  agent: planner
+  focus: "development cycle outcomes, current project state, and next actions"
+
+
+stages:
+  - id: plan
+    agent: planner
+    task: >
+      Analyze the codebase and create a detailed implementation plan for: {task}.
+      Include acceptance criteria, test strategy, architecture decisions,
+      likely files to change, dependencies, risks, and verification plan.
+      If the task is ambiguous, state what needs clarification.
+
+  - id: write-tests
+    agent: worker
+    task: >
+      Write comprehensive tests for: {task}.
+      Follow the plan: {outputs.plan}.
+      Use the project's test framework and conventions.
+      Cover: happy paths, error paths, edge cases, integration points.
+      Do not modify production code in this stage.
+
+    gate:
+      type: review-loop
+      maxRounds: 3
+      targetScore: 9
+      reviewers:
+        - focus: "Test completeness: are all scenarios, acceptance criteria, and edge cases from the plan covered?"
+        - focus: "Test quality: are tests isolated, deterministic, maintainable, and following project conventions?"
+        - focus: "Edge cases: are boundary values, error states, unusual inputs, and integration points tested where relevant?"
+
+  - id: implement
+    agent: worker
+    task: >
+      Implement the code to pass the tests: {outputs.write-tests}.
+      Follow the plan: {outputs.plan}.
+      Keep code clean, focused, and well-structured.
+      Do not modify tests unless a test is clearly invalid; if you modify a test, explain why.
+
+    gate:
+      type: review-loop
+      maxRounds: 3
+      targetScore: 8
+      reviewers:
+        - focus: "Does the implementation satisfy ALL acceptance criteria and make the intended tests pass?"
+        - focus: "Is the code simple, readable, maintainable, and consistent with existing project patterns?"
+        - focus: "Does the implementation handle errors and edge cases without overengineering?"
+
+  - id: verify
+    agent: worker
+    task: >
+      Run the full project test suite using the existing package manager or test scripts.
+      Report:
+      - Pass/fail counts
+      - Any regressions
+      - Coverage if available
+      - Commands attempted and blockers
+      - Stability assessment
+      Implementation context: {outputs.implement}
+
+  - id: project-review
+    parallel:
+      - id: code-health
+        agent: oracle
+        task: >
+          Review the overall project state after this change for: {task}.
+          Consider the verification results: {outputs.verify}.
+          What technical debt exists? What should be addressed soon?
+          Return concise sections: Debt, Soon, Risks.
+
+      - id: next-priorities
+        agent: planner
+        task: >
+          Based on the project state, verification results: {outputs.verify},
+          and this work, what are the 3 most impactful things to work on next for: {task}?
+          Prioritize by user value, risk reduction, and maintainability.
+          Return exactly 3 prioritized next tasks with rationale.
+
+      - id: quality-assessment
+        agent: reviewer
+        task: >
+          Assess the overall quality of the project implementation for: {task}.
+          Consider the verification results: {outputs.verify}.
+          What risks, bottlenecks, or areas need attention before continuing?
+          Return a concise quality/risk report.
+
+  - id: synthesize
+    agent: planner
+    task: >
+      Synthesize the project review findings into a clear action plan.
+
+      Code Health: {outputs.code-health}
+      Next Priorities: {outputs.next-priorities}
+      Quality Assessment: {outputs.quality-assessment}
+      Verification Results: {outputs.verify}
+
+      Output a structured proposal with:
+      1. What was accomplished
+      2. Current project state
+      3. Top 3 recommended next tasks with rationale
+      4. Any blocking issues or risks

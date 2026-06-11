@@ -1,0 +1,59 @@
+name: refactor
+description: "Safe refactoring pipeline — understand, plan, refactor with review gate, verify no regressions."
+report:
+  agent: planner
+  focus: "refactoring results, regression risk, and next steps"
+
+
+stages:
+  - id: understand
+    agent: scout
+    task: >
+      Analyze the codebase to understand the current state of: {task}.
+      Find all relevant files, data flow, dependencies, and existing tests.
+      Identify risks, unknowns, and safe refactoring boundaries.
+      Return a concise map of what should and should not be changed.
+
+  - id: plan
+    agent: planner
+    task: >
+      Create a refactoring plan for: {task}.
+      Based on the codebase analysis: {outputs.understand}.
+      Include:
+      - Files to change
+      - Order of changes (to avoid breaking state)
+      - Test strategy
+      - Rollback plan
+      - Risk mitigation steps
+
+  - id: refactor
+    agent: worker
+    task: >
+      Implement the refactoring according to this plan: {outputs.plan}.
+      Codebase context: {outputs.understand}.
+      Make incremental, verifiable changes.
+      Preserve behavior; do not add unrelated features.
+      If tests reveal a behavior mismatch, stop and report it clearly.
+
+    gate:
+      type: review-loop
+      maxRounds: 3
+      targetScore: 8
+      reviewers:
+        - focus: "Does the refactored code preserve the original behavior? Are there behavior changes or missing cases?"
+        - focus: "Is the refactored code simpler, cleaner, and easier to maintain without unnecessary changes?"
+        - focus: "Are there any breaking changes, regressions, or risky edits that should block this refactor?"
+
+  - id: verify
+    agent: worker
+    task: >
+      Run the full test suite to verify no regressions after refactoring: {outputs.refactor}.
+      Report any failures, flaky tests, coverage impact if available, and commands attempted.
+
+  - id: summary
+    agent: planner
+    task: >
+      Summarize the refactoring done for: {task}.
+      Explain what changed, why it improved the codebase, and any follow-up work needed.
+      Test results: {outputs.verify}.
+      Include changed files if they are known from the refactor output.

@@ -1,0 +1,25 @@
+name: hello-world
+description: "Smoke-test pipeline: explore relevant project areas, then produce a concise action plan."
+report:
+  agent: planner
+  focus: "quick overview and recommended next action"
+
+
+stages:
+  - id: explore
+    agent: scout
+    task: >
+      Explore the codebase for: {task}.
+      Return a concise structured summary with:
+      1. Relevant files and directories
+      2. Likely tech stack and test commands
+      3. Obvious risks, assumptions, or missing context
+      If the task is too broad, say what needs clarification.
+
+  - id: plan
+    agent: planner
+    task: >
+      Based on this exploration: {outputs.explore},
+      create a simple action plan for: {task}.
+      Keep it concise — 3-5 bullet points.
+      Include: next action, likely files to change, and verification step.

@@ -1,0 +1,78 @@
+name: tdd-review
+description: "Full TDD cycle with test quality and code review gates — ideal for new features or refactoring."
+report:
+  agent: planner
+  focus: "TDD cycle outcomes, test quality, and implementation readiness"
+
+
+stages:
+  - id: analyze
+    agent: planner
+    task: >
+      Analyze the codebase and create a step-by-step implementation plan for: {task}.
+      Include acceptance criteria, test strategy, edge cases, architecture decisions,
+      likely files to change, risks, and unknowns.
+      If the task is ambiguous or important context is missing, say so explicitly.
+
+  - id: write-tests
+    agent: worker
+    task: >
+      Write tests according to this plan: {outputs.analyze}.
+      Cover happy paths, error paths, boundary values, and edge cases.
+      Use the project's existing test framework and conventions.
+      Do not modify production code in this stage.
+      After writing tests, report changed files and the commands needed to run them.
+    gate:
+      type: review-loop
+      maxRounds: 3
+      targetScore: 9
+      reviewers:
+        - focus: "Do the tests cover ALL scenarios, acceptance criteria, and edge cases from the plan? Identify any missing cases."
+        - focus: "Are tests production-ready: isolated, deterministic, maintainable, and following project conventions?"
+        - focus: "Are error paths, boundary values, async/failure behavior, and unusual inputs covered where relevant?"
+
+  - id: implement
+    agent: worker
+    task: >
+      Implement the code to make these tests pass: {outputs.write-tests}.
+      Follow the plan: {outputs.analyze}.
+      Keep changes minimal, focused, and consistent with project conventions.
+      Do not modify tests unless a test is clearly wrong; if you modify a test, explain why.
+
+    gate:
+      type: review-loop
+      maxRounds: 3
+      targetScore: 8
+      reviewers:
+        - focus: "Does the implementation satisfy all acceptance criteria and make the intended tests pass?"
+        - focus: "Is the code simple, readable, well-structured, and consistent with existing project patterns?"
+        - focus: "Does the implementation handle errors and edge cases without overengineering or hidden behavior?"
+
+  - id: verify
+    agent: worker
+    task: >
+      Run ALL tests in the project using the existing package manager or test scripts.
+      Report:
+      1. Which tests pass and fail
+      2. Any regressions introduced
+      3. Coverage if available
+      4. Commands attempted and any blockers
+      Implementation context: {outputs.implement}
+
+  - id: propose-next
+    parallel:
+      - id: next-steps
+        agent: oracle
+        task: >
+          Based on the current project state, test results: {outputs.verify},
+          and this completed task ({task}),
+          what are the 3 most impactful things to work on next?
+          Consider technical debt, user-facing features, and architecture improvements.
+          Return exactly 3 prioritized next steps with rationale.
+
+      - id: risks
+        agent: reviewer
+        task: >
+          Review the project state after this change: {outputs.verify}.
+          What risks, bottlenecks, or areas need attention before continuing?
+          Return a concise risk report with severity.

@@ -1,0 +1,57 @@
+{
+  "name": "pi-pipelines",
+  "version": "0.1.0",
+  "description": "Pi extension for defining and running multi-agent pipelines with review gates, loops, and scoring — powered by pi-subagents",
+  "author": "Pi Pipelines",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nicobailon/pi-pipelines.git"
+  },
+  "bugs": {
+    "url": "https://github.com/nicobailon/pi-pipelines/issues"
+  },
+  "homepage": "https://github.com/nicobailon/pi-pipelines#readme",
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-coding-agent",
+    "pipelines",
+    "orchestration",
+    "workflows"
+  ],
+  "pi": {
+    "extensions": [
+      "./extensions/index.ts"
+    ],
+    "skills": [
+      "./skills"
+    ],
+    "image": "https://raw.githubusercontent.com/nicobailon/pi-subagents/main/banner.png"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*",
+    "typebox": "*"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^25.9.2",
+    "@vitest/coverage-v8": "^4.1.8",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.8"
+  }
+}
